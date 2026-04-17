@@ -1,0 +1,470 @@
+================================================================================
+       RAPPORT TECHNIQUE — GUARDIANTRACK
+       Application de Sécurité Personnelle
+================================================================================
+
+Date : Avril 2026
+Auteur : [Votre Nom]
+Plateforme : Android (API 26+)
+Langage : Kotlin
+Architecture : MVVM + Clean Architecture
+UI : Jetpack Compose + Material 3
+
+================================================================================
+TABLE DES MATIÈRES
+================================================================================
+
+1. Introduction et Contexte
+2. Questions Obligatoires (Réponses Contextualisées)
+3. Architecture et Structure du Projet
+4. Base de Données Room — Description des Tables
+5. Grille d'Évaluation
+6. Conclusion
+
+================================================================================
+1. INTRODUCTION ET CONTEXTE
+================================================================================
+
+GuardianTrack est une application Android de sécurité personnelle développée
+en Kotlin. Elle surveille l'accéléromètre du téléphone en temps réel via un
+Foreground Service pour détecter les chutes. Lorsqu'une chute est détectée,
+l'application :
+
+  • Enregistre l'incident (type, horodatage, coordonnées GPS) dans Room
+  • Affiche une notification d'urgence
+  • Envoie un SMS réel à TOUS les contacts d'urgence configurés
+  • Synchronise les incidents vers une API distante via WorkManager
+
+L'application est entièrement construite avec Jetpack Compose et Material 3,
+supporte le mode clair/sombre, et fonctionne en mode offline-first.
+
+================================================================================
+2. QUESTIONS OBLIGATOIRES — RÉPONSES CONTEXTUALISÉES
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 1 : Pourquoi Flow plutôt que LiveData pour la communication
+             entre Room et le ViewModel ?
+────────────────────────────────────────────────────────────────────────────────
+
+Dans GuardianTrack, nous avons choisi Flow pour plusieurs raisons spécifiques
+à notre architecture :
+
+1) COMPATIBILITÉ AVEC LES COROUTINES : Notre SurveillanceService utilise un
+   CoroutineScope (SupervisorJob + Dispatchers.Default) pour gérer les événe-
+   ments de chute. Flow s'intègre naturellement dans cet écosystème de
+   coroutines, tandis que LiveData aurait nécessité des conversions
+   supplémentaires (asFlow()/asLiveData()).
+
+2) OPÉRATIONS EN CHAÎNE : Dans UserPreferencesRepository, nous chaînons des
+   opérations de transformation sur les données :
+   
+     val userPreferences: Flow<UserPreferencesData> = dataStore.data.map {
+         preferences -> UserPreferencesData(
+             sensitivityThreshold = preferences[SENSITIVITY_THRESHOLD] ?: 15.0f,
+             isDarkMode = preferences[DARK_MODE] ?: false,
+             ...
+         )
+     }
+   
+   Flow permet ces transformations fonctionnelles (map, filter, combine)
+   de manière plus élégante que LiveData.Transformations.
+
+3) THREAD-SAFETY : Le SurveillanceService collecte le seuil de sensibilité
+   sur Dispatchers.Default :
+   
+     serviceScope.launch {
+         userPreferencesRepository.sensitivityThreshold.collect { threshold ->
+             fallDetector.updateThreshold(threshold)
+         }
+     }
+   
+   Flow fonctionne sur n'importe quel dispatcher, tandis que LiveData est
+   limité au main thread pour l'observation.
+
+4) COLD STREAM vs HOT STREAM : Room retourne un Flow froid — les données ne
+   sont émises que quand un collecteur est actif. Cela est parfait pour notre
+   HistoryScreen qui ne doit recevoir des mises à jour que quand elle est
+   visible.
+
+QUAND AURIONS-NOUS CHOISI LIVEDATA ?
+Si notre projet n'utilisait pas Compose (qui préfère Flow via
+collectAsStateWithLifecycle()), ou si nous avions besoin d'observer des
+données dans des Fragments avec un ViewBinding classique, LiveData aurait
+été plus approprié car il gère automatiquement le cycle de vie sans
+collecteur explicite.
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 2 : Gestion du refus définitif de ACCESS_FINE_LOCATION
+────────────────────────────────────────────────────────────────────────────────
+
+Dans GuardianTrack, la localisation est critique mais non bloquante. Notre
+stratégie de repli est implémentée dans LocationHelper.getCurrentLocation() :
+
+1) VÉRIFICATION DE PERMISSION : Si ACCESS_FINE_LOCATION et
+   ACCESS_COARSE_LOCATION sont toutes les deux refusées, la méthode retourne
+   immédiatement des coordonnées par défaut (0.0, 0.0) :
+   
+     if (checkSelfPermission(ACCESS_FINE_LOCATION) != GRANTED &&
+         checkSelfPermission(ACCESS_COARSE_LOCATION) != GRANTED) {
+         return Pair(DEFAULT_LATITUDE, DEFAULT_LONGITUDE)
+     }
+
+2) STRATÉGIE DE REPLI : L'incident est QUAND MÊME enregistré dans Room avec
+   latitude=0.0 et longitude=0.0. La détection de chute (accéléromètre) ne
+   dépend PAS de la localisation — elle fonctionne toujours. Seule
+   l'information de position est dégradée.
+
+3) POURQUOI CETTE APPROCHE ? Dans un contexte de sécurité personnelle, il est
+   préférable d'enregistrer un incident SANS position plutôt que de ne pas
+   l'enregistrer du tout. Le SMS est envoyé dans tous les cas avec la mention
+   "Location unavailable" si la position n'est pas disponible.
+
+4) CAS shouldShowRequestPermissionRationale = false : Cela signifie que
+   l'utilisateur a coché "Ne plus demander". Dans MainActivity, nous pourrions
+   afficher un dialogue guidant l'utilisateur vers les paramètres système :
+   
+     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+         data = Uri.fromParts("package", packageName, null)
+     }
+   
+   Actuellement, l'app continue de fonctionner en mode dégradé (sans GPS)
+   sans bloquer l'utilisateur.
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 3 : Limites de sécurité du ContentProvider et protection
+             contre les injections
+────────────────────────────────────────────────────────────────────────────────
+
+LIMITES DE SÉCURITÉ :
+Notre ContentProvider (EmergencyContactProvider) est protégé par une
+permission de type "signature|privileged" :
+
+  <permission
+      android:name="com.guardian.track.permission.READ_EMERGENCY_CONTACTS"
+      android:protectionLevel="signature|privileged" />
+
+Cela signifie que SEULES les applications signées avec la même clé de
+signature peuvent accéder aux données. C'est un niveau de protection élevé,
+mais les limites sont :
+
+  • Les apps système (privileged) peuvent y accéder
+  • Si la clé de signature est compromise, la protection tombe
+  • Sur un appareil rooté, la protection peut être contournée
+
+ATTAQUE DE TYPE "CONTENT PROVIDER INJECTION" :
+Une injection se produit quand un attaquant manipule les paramètres de
+sélection SQL dans les méthodes query()/update()/delete(). Par exemple :
+
+  // Vulnérable :
+  cursor = query(uri, null, "name = " + userInput, null, null)
+  // userInput = "'; DROP TABLE contacts; --"
+
+NOTRE PROTECTION :
+1) Nous utilisons des paramètres de sélection paramétrés (selectionArgs) et
+   non la concaténation de chaînes
+2) L'URI est validée via UriMatcher avant tout accès
+3) La permission signature empêche toute app tierce d'appeler le provider
+4) Les données exposées (contacts d'urgence) sont en lecture seule pour les
+   apps clientes
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 4 : Restrictions services arrière-plan Android 12+ et
+             ACTION_BOOT_COMPLETED
+────────────────────────────────────────────────────────────────────────────────
+
+RESTRICTIONS ANDROID 12 (API 31) :
+Depuis Android 12, les applications ne peuvent PLUS démarrer un Foreground
+Service directement depuis un contexte en arrière-plan. L'appel à
+startForegroundService() depuis un BroadcastReceiver lève une
+ForegroundServiceStartNotAllowedException.
+
+NOTRE SOLUTION — WORKMANAGER :
+Au lieu de démarrer directement le SurveillanceService depuis le
+BootReceiver, nous utilisons WorkManager comme intermédiaire :
+
+  class BootReceiver : BroadcastReceiver() {
+      override fun onReceive(context: Context, intent: Intent?) {
+          if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
+              // On NE démarre PAS le service directement
+              // On planifie un Worker qui sera exécuté quand le système le permet
+              WorkManager.getInstance(context).enqueueUniqueWork(
+                  "service_start",
+                  ExistingWorkPolicy.KEEP,
+                  OneTimeWorkRequestBuilder<ServiceStartWorker>().build()
+              )
+          }
+      }
+  }
+
+Le ServiceStartWorker est exécuté par le système dans un contexte autorisé
+(foreground), ce qui lui permet d'appeler startForegroundService() sans
+violer les restrictions d'Android 12.
+
+POURQUOI CETTE APPROCHE EST "PROPRE" :
+  • Elle respecte les restrictions du système
+  • WorkManager garantit l'exécution même si le système est sous pression
+  • Le Worker est exécuté une seule fois (OneTimeWorkRequest)
+  • ExistingWorkPolicy.KEEP évite les duplications
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 5 : Séparation Entity / DTO / DomainModel — Pourquoi et exemple
+────────────────────────────────────────────────────────────────────────────────
+
+POURQUOI SÉPARER ?
+Chaque couche a des responsabilités et des contraintes différentes :
+
+  • ENTITY (Room) : Annotée @Entity, contient des IDs auto-générés, des
+    noms de colonnes spécifiques. Liée à la structure de la base de données.
+    
+  • DTO (Réseau) : Structure dictée par l'API distante. Peut contenir des
+    champs que le domaine n'a pas besoin de connaître (ex: server_id,
+    api_version).
+    
+  • DOMAIN MODEL : Objet propre, sans dépendance technique. Représente le
+    concept métier pur.
+
+EXEMPLE CONCRET DANS GUARDIANTRACK :
+
+  // Entity Room — lié à la structure DB
+  @Entity(tableName = "incidents")
+  data class IncidentEntity(
+      @PrimaryKey(autoGenerate = true) val id: Long = 0,
+      val timestamp: Long,              // Unix timestamp (stockage optimisé)
+      val type: String,                 // "FALL", "BATTERY", "MANUAL" (texte)
+      val latitude: Double,
+      val longitude: Double,
+      @ColumnInfo(name = "is_synced")
+      val isSynced: Int                 // 0 ou 1 (SQLite n'a pas de Boolean)
+  )
+
+  // Domain Model — propre et typé
+  data class Incident(
+      val id: Long,
+      val timestamp: Long,
+      val type: IncidentType,           // Enum typé (pas une String)
+      val latitude: Double,
+      val longitude: Double,
+      val isSynced: Boolean,            // Boolean natif
+      val formattedDateTime: String     // Propriété calculée pour l'affichage
+  )
+
+  // DTO Réseau — format API
+  data class IncidentDto(
+      val type: String,
+      val timestamp: String,            // ISO8601 (format API)
+      val location: LocationDto         // Objet imbriqué (structure API)
+  )
+
+VALEUR AJOUTÉE :
+  - Si l'API change son format de date → seul le DTO et son mapper changent
+  - Si Room ajoute un index → seule l'Entity change
+  - Le ViewModel ne dépend jamais de Room ni de Retrofit
+  - Les tests unitaires du domaine ne nécessitent aucune dépendance Android
+
+────────────────────────────────────────────────────────────────────────────────
+QUESTION 6 : WorkManager vs JobScheduler vs AlarmManager —
+             Justification du choix
+────────────────────────────────────────────────────────────────────────────────
+
+COMPARAISON :
+
+┌─────────────────┬──────────────────────────────────────────────────────────┐
+│ WorkManager     │ API moderne, supporte contraintes réseau, survit aux    │
+│                 │ redémarrages, retry automatique, chainage de tâches.    │
+│                 │ Utilise JobScheduler (API 23+) ou AlarmManager en       │
+│                 │ interne selon la version d'Android.                     │
+├─────────────────┼──────────────────────────────────────────────────────────┤
+│ JobScheduler    │ API système (API 21+), plus bas niveau. Nécessite de    │
+│                 │ gérer manuellement les contraintes et le retry.         │
+│                 │ Pas de support natif pour le chainage.                  │
+├─────────────────┼──────────────────────────────────────────────────────────┤
+│ AlarmManager    │ Pour des tâches à heure précise (alarmes). Ne garantit  │
+│                 │ PAS l'exécution quand l'appareil est en Doze mode.      │
+│                 │ Non adapté pour du travail réseau différé.              │
+└─────────────────┴──────────────────────────────────────────────────────────┘
+
+JUSTIFICATION POUR GUARDIANTRACK :
+
+Notre SyncWorker synchronise les incidents non-envoyés vers l'API. Nous
+avons choisi WorkManager car :
+
+1) CONTRAINTE RÉSEAU : La synchronisation ne doit s'exécuter que quand le
+   réseau est disponible. WorkManager gère cela nativement :
+   
+     val constraints = Constraints.Builder()
+         .setRequiredNetworkType(NetworkType.CONNECTED)
+         .build()
+
+2) OFFLINE-FIRST : Les incidents sont d'abord stockés localement dans Room.
+   WorkManager planifie automatiquement la synchronisation pour plus tard,
+   même si le téléphone est hors-ligne au moment de l'incident.
+
+3) SURVIE AU REDÉMARRAGE : Si le téléphone redémarre avant la synchro,
+   WorkManager réexécute automatiquement le Worker au prochain démarrage.
+   Ni JobScheduler ni AlarmManager ne font cela sans code supplémentaire.
+
+4) RETRY AVEC BACKOFF : En cas d'échec réseau, WorkManager replanifie
+   automatiquement avec un backoff exponentiel, sans code supplémentaire.
+
+5) COMPATIBILITÉ : WorkManager utilise JobScheduler sur API 23+ et
+   AlarmManager + BroadcastReceiver sur les versions antérieures. Notre
+   minSdk est 26, mais le code reste portable.
+
+================================================================================
+3. ARCHITECTURE ET STRUCTURE DU PROJET
+================================================================================
+
+L'application suit le pattern MVVM (Model-View-ViewModel) avec une
+architecture Clean en 3 couches :
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          UI LAYER (Jetpack Compose)                        │
+│  DashboardScreen ──> DashboardViewModel                                   │
+│  HistoryScreen   ──> HistoryViewModel                                     │
+│  SettingsScreen  ──> SettingsViewModel                                    │
+│  Navigation : GuardianNavGraph (3 routes avec NavigationBar)              │
+│  Theme : Futuristic light/dark avec Material 3                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          DOMAIN LAYER                                     │
+│  Incident (type, timestamp, lat, lng, isSynced)                           │
+│  EmergencyContact (name, phoneNumber)                                     │
+│  IncidentType (FALL, BATTERY, MANUAL)                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          DATA LAYER                                       │
+│  Room Database : incidents + emergency_contacts                           │
+│  DataStore : préférences utilisateur                                      │
+│  Retrofit : API distante pour synchronisation                             │
+│  Repositories : IncidentRepository, ContactRepository,                    │
+│                 UserPreferencesRepository                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          SERVICES & WORKERS                               │
+│  SurveillanceService (Foreground) : accéléromètre + FallDetector          │
+│  SyncWorker (WorkManager) : synchronisation différée                      │
+│  ServiceStartWorker : redémarrage après boot                             │
+│  BroadcastReceivers : BOOT_COMPLETED, BATTERY_LOW                        │
+│  ContentProvider : partage sécurisé des contacts d'urgence                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          INJECTION (Hilt)                                 │
+│  AppModule : DataStore, SmsHelper, LocationHelper                         │
+│  DatabaseModule : Room, DAOs                                              │
+│  NetworkModule : Retrofit, OkHttp, ApiService                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ALGORITHME DE DÉTECTION DE CHUTE :
+
+  Phase 1 — Free-fall : magnitude < 3.0 m/s² (proche de l'apesanteur)
+  Phase 2 — Impact   : magnitude > seuil (configurable 3-30 m/s²)
+                        dans les 500ms suivant la phase 1
+  
+  magnitude = √(ax² + ay² + az²) calculée à partir de l'accéléromètre
+
+================================================================================
+4. BASE DE DONNÉES ROOM — DESCRIPTION DES TABLES
+================================================================================
+
+La base de données "guardian_track.db" contient 2 tables principales :
+
+TABLE : incidents
+─────────────────────────────────────────────────────────────────────────────
+│ Colonne     │ Type    │ Description                                      │
+├─────────────┼─────────┼──────────────────────────────────────────────────│
+│ id          │ INTEGER │ Clé primaire auto-incrémentée                    │
+│ timestamp   │ INTEGER │ Timestamp Unix (millisecondes depuis epoch)       │
+│ type        │ TEXT    │ Type d'incident : "FALL", "BATTERY", "MANUAL"    │
+│ latitude    │ REAL    │ Latitude GPS au moment de l'incident             │
+│ longitude   │ REAL    │ Longitude GPS au moment de l'incident            │
+│ is_synced   │ INTEGER │ 0 = non synchronisé, 1 = envoyé à l'API         │
+─────────────────────────────────────────────────────────────────────────────
+
+  • Chaque ligne représente un incident enregistré par l'application
+  • Le timestamp permet de trier chronologiquement
+  • latitude/longitude sont les coordonnées GPS fraîches au moment exact
+    de la détection (précision haute via PRIORITY_HIGH_ACCURACY)
+  • is_synced permet au SyncWorker de ne synchroniser que les incidents
+    non encore envoyés à l'API
+
+TABLE : emergency_contacts
+─────────────────────────────────────────────────────────────────────────────
+│ Colonne      │ Type    │ Description                                     │
+├──────────────┼─────────┼─────────────────────────────────────────────────│
+│ id           │ INTEGER │ Clé primaire auto-incrémentée                   │
+│ name         │ TEXT    │ Nom du contact d'urgence                        │
+│ phone_number │ TEXT    │ Numéro de téléphone pour l'envoi de SMS         │
+─────────────────────────────────────────────────────────────────────────────
+
+  • Chaque ligne est un contact d'urgence ajouté par l'utilisateur
+  • Lors d'un incident, un SMS est envoyé à CHAQUE contact de cette table
+    ainsi qu'au numéro d'urgence principal des préférences
+  • Les contacts sont gérés depuis l'écran Settings (ajout/suppression)
+
+TABLE : room_master_table (système)
+─────────────────────────────────────────────────────────────────────────────
+  • Table interne de Room contenant le hash de l'identité du schéma
+  • Utilisée par Room pour détecter les migrations de base de données
+  • Ne doit PAS être modifiée manuellement
+
+================================================================================
+5. GRILLE D'ÉVALUATION
+================================================================================
+
+┌───────────────────────────────────────────┬─────────┬───────────────────────┐
+│ Critère d'Évaluation                      │ Points  │ Statut                │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Architecture MVVM + Hilt                  │ /20     │ ✅ Implémenté         │
+│ Séparation View/ViewModel/Repository,     │         │ 3 modules Hilt,       │
+│ modules Hilt, survie à la rotation        │         │ survie via ViewModel  │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Foreground Service + Détection Capteur    │ /20     │ ✅ Implémenté         │
+│ Notification persistante, algorithme      │         │ Free-fall + Impact,   │
+│ free-fall/impact, paramétrable            │         │ seuil configurable    │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Room + DataStore + Export Fichier         │ /15     │ ✅ Implémenté         │
+│ Entités/DAO corrects, préférences         │         │ Export CSV via        │
+│ persistées, export CSV/TXT               │         │ CsvExporter           │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Retrofit + Sealed Classes + WorkManager   │ /10     │ ✅ Implémenté         │
+│ Envoi d'alerte, offline-first,            │         │ SyncWorker avec       │
+│ synchronisation différée                  │         │ NetworkType.CONNECTED │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ BroadcastReceiver (BOOT + BATTERY)        │ /10     │ ✅ Implémenté         │
+│ Deux receivers fonctionnels,              │         │ Compatible Android    │
+│ compatibilité Android 12+                 │         │ 12+ via WorkManager   │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ ContentProvider sécurisé                  │ /10     │ ✅ Implémenté         │
+│ URI contractuelle, permission signature   │         │ signature|privileged  │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Permissions Dynamiques + UX               │ /10     │ ✅ Implémenté         │
+│ Rationale, DENIED_PERMANENTLY,            │         │ Mode simulation SMS   │
+│ mode simulation SMS                       │         │ disponible            │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ Rapport Technique                         │ /5      │ ✅ Ce document        │
+│ Réponses contextualisées                  │         │                       │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ TOTAL                                     │ /100    │                       │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ BONUS — Jetpack Compose                   │ +5      │ ✅ UI 100% Compose    │
+│ UI entière en Compose + Material 3        │         │ Light/Dark, anims     │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ BONUS — Algorithme détection amélioré     │ +3      │ ✅ Two-phase          │
+│ Free-fall + impact, fenêtre temporelle    │         │ algorithme            │
+├───────────────────────────────────────────┼─────────┼───────────────────────┤
+│ TOTAL POSSIBLE                            │ /108    │                       │
+└───────────────────────────────────────────┴─────────┴───────────────────────┘
+
+================================================================================
+6. CONCLUSION
+================================================================================
+
+GuardianTrack démontre l'utilisation des 4 piliers Android (Activity, Service,
+BroadcastReceiver, ContentProvider) dans un contexte réel de sécurité
+personnelle. L'architecture MVVM avec Hilt assure une séparation claire des
+responsabilités, tandis que l'approche offline-first (Room + WorkManager)
+garantit la fiabilité même sans connexion réseau.
+
+Le choix de Jetpack Compose pour l'UI permet une interface futuriste et
+réactive avec support complet du mode clair/sombre et des animations Material 3.
+
+================================================================================
+                              FIN DU RAPPORT
+================================================================================

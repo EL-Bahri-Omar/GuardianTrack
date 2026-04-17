@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+
+    <!-- Custom permission for ContentProvider -->
+    <permission
+        android:name="com.guardian.track.READ_EMERGENCY_CONTACTS"
+        android:description="@string/permission_read_contacts_desc"
+        android:label="@string/permission_read_contacts_label"
+        android:protectionLevel="signature|privileged" />
+
+    <application
+        android:name=".GuardianTrackApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Guardiantrack"
+        tools:targetApi="34">
+
+        <!-- Single Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:configChanges="uiMode"
+            android:theme="@style/Theme.Guardiantrack">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Foreground Surveillance Service -->
+        <service
+            android:name=".service.SurveillanceService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- Battery Low Receiver (static) -->
+        <receiver
+            android:name=".receiver.BatteryLowReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BATTERY_LOW" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot Completed Receiver (static) -->
+        <receiver
+            android:name=".receiver.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Emergency Contact ContentProvider -->
+        <provider
+            android:name=".provider.EmergencyContactProvider"
+            android:authorities="com.guardian.track.provider"
+            android:exported="true"
+            android:readPermission="com.guardian.track.READ_EMERGENCY_CONTACTS"
+            android:writePermission="com.guardian.track.READ_EMERGENCY_CONTACTS" />
+
+        <!-- WorkManager initializer for Hilt -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+    </application>
+
+</manifest>

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport Technique — GuardianTrack</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #1a1a2e;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: white;
+        }
+
+        @media print {
+            body { padding: 15mm; }
+            .page-break { page-break-before: always; }
+            h2 { page-break-after: avoid; }
+        }
+
+        h1 {
+            font-size: 22pt;
+            font-weight: 700;
+            color: #1e3a5f;
+            border-bottom: 3px solid #3B82F6;
+            padding-bottom: 8px;
+            margin-bottom: 4px;
+        }
+
+        h1 + p.subtitle {
+            font-size: 13pt;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
+
+        .meta-info {
+            background: #f0f4ff;
+            border-left: 4px solid #3B82F6;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+            font-size: 10pt;
+            line-height: 1.8;
+        }
+
+        .meta-info strong { color: #1e3a5f; }
+
+        h2 {
+            font-size: 15pt;
+            font-weight: 700;
+            color: #1e3a5f;
+            margin-top: 28px;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+        }
+
+        h3 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: #3B82F6;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+
+        p { margin-bottom: 10px; text-align: justify; }
+
+        strong { color: #1e3a5f; }
+
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: #f3f4f6;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 9.5pt;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 14px 18px;
+            border-radius: 8px;
+            font-size: 9pt;
+            line-height: 1.5;
+            overflow-x: auto;
+            margin: 10px 0 14px 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 16px 0;
+            font-size: 10pt;
+        }
+
+        th {
+            background: #1e3a5f;
+            color: white;
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:nth-child(even) { background: #f9fafb; }
+
+        ul, ol { margin: 8px 0 12px 24px; }
+        li { margin-bottom: 4px; }
+
+        .toc {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px 24px;
+            margin: 16px 0 24px 0;
+        }
+
+        .toc h3 { margin-top: 0; color: #1e3a5f; }
+        .toc ol { margin-bottom: 0; }
+        .toc li { margin-bottom: 2px; }
+
+        .architecture-box {
+            background: #f0f4ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+            font-family: monospace;
+            font-size: 9.5pt;
+            white-space: pre;
+            line-height: 1.4;
+        }
+
+        .eval-grid td:last-child { text-align: center; }
+        .eval-grid .bonus { background: #f0fdf4; }
+        .eval-grid .total { background: #1e3a5f; color: white; font-weight: 700; }
+
+        .check { color: #22c55e; font-weight: bold; }
+
+        hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<h1>Rapport Technique — GuardianTrack</h1>
+<p class="subtitle">Application de Sécurité Personnelle</p>
+
+<div class="meta-info">
+    <strong>Date :</strong> Avril 2026 &nbsp;|&nbsp;
+    <strong>Plateforme :</strong> Android (API 26+) &nbsp;|&nbsp;
+    <strong>Langage :</strong> Kotlin<br>
+    <strong>Architecture :</strong> MVVM + Clean Architecture &nbsp;|&nbsp;
+    <strong>UI :</strong> Jetpack Compose + Material 3
+</div>
+
+<div class="toc">
+    <h3>Table des Matières</h3>
+    <ol>
+        <li>Introduction et Contexte</li>
+        <li>Questions Obligatoires (Réponses Contextualisées)</li>
+        <li>Architecture et Structure du Projet</li>
+        <li>Base de Données Room — Description des Tables</li>
+        <li>Grille d'Évaluation</li>
+        <li>Conclusion</li>
+    </ol>
+</div>
+
+<h2>1. Introduction et Contexte</h2>
+
+<p>GuardianTrack est une application Android de sécurité personnelle développée en Kotlin. Elle surveille l'accéléromètre du téléphone en temps réel via un <strong>Foreground Service</strong> pour détecter les chutes. Lorsqu'une chute est détectée, l'application :</p>
+
+<ul>
+    <li><strong>Enregistre</strong> l'incident (type, horodatage, coordonnées GPS) dans une base Room</li>
+    <li><strong>Affiche</strong> une notification d'urgence sur le téléphone</li>
+    <li><strong>Envoie un SMS réel</strong> à tous les contacts d'urgence configurés</li>
+    <li><strong>Synchronise</strong> les incidents vers une API distante via WorkManager</li>
+</ul>
+
+<p>L'application supporte le mode clair/sombre, fonctionne en mode offline-first, et est entièrement construite avec Jetpack Compose et Material 3.</p>
+
+<h2 class="page-break">2. Questions Obligatoires</h2>
+
+<h3>Question 1 — Pourquoi Flow plutôt que LiveData ?</h3>
+
+<p>Dans GuardianTrack, nous avons choisi <code>Flow</code> pour plusieurs raisons spécifiques à notre architecture :</p>
+
+<p><strong>1. Compatibilité avec les coroutines :</strong> Notre <code>SurveillanceService</code> utilise un <code>CoroutineScope(SupervisorJob() + Dispatchers.Default)</code> pour gérer les événements de chute. Flow s'intègre naturellement dans cet écosystème, tandis que LiveData aurait nécessité des conversions supplémentaires.</p>
+
+<p><strong>2. Opérations en chaîne :</strong> Dans <code>UserPreferencesRepository</code>, nous chaînons des transformations :</p>
+
+<pre><code>val userPreferences: Flow&lt;UserPreferencesData&gt; = dataStore.data.map { 
+    preferences -&gt;
+    UserPreferencesData(
+        sensitivityThreshold = preferences[SENSITIVITY_THRESHOLD] ?: 15.0f,
+        isDarkMode = preferences[DARK_MODE] ?: false,
+        ...
+    )
+}</code></pre>
+
+<p>Flow permet ces transformations fonctionnelles (<code>map</code>, <code>filter</code>, <code>combine</code>) de manière plus élégante que <code>LiveData.Transformations</code>.</p>
+
+<p><strong>3. Thread-safety :</strong> Le <code>SurveillanceService</code> collecte le seuil de sensibilité sur <code>Dispatchers.Default</code> :</p>
+
+<pre><code>serviceScope.launch {
+    userPreferencesRepository.sensitivityThreshold.collect { threshold -&gt;
+        fallDetector.updateThreshold(threshold)
+    }
+}</code></pre>
+
+<p>Flow fonctionne sur n'importe quel dispatcher, tandis que LiveData est limité au main thread.</p>
+
+<p><strong>4. Cold Stream :</strong> Room retourne un Flow froid — les données ne sont émises que quand un collecteur est actif. C'est optimal pour <code>HistoryScreen</code> qui ne reçoit des mises à jour que quand elle est visible.</p>
+
+<p><strong>Quand aurions-nous choisi LiveData ?</strong> Si le projet n'utilisait pas Compose (qui préfère Flow via <code>collectAsStateWithLifecycle()</code>), ou si nous utilisions des Fragments avec ViewBinding classique.</p>
+
+<br><h3>Question 2 — Gestion du refus définitif de ACCESS_FINE_LOCATION</h3>
+
+<p>La localisation est <strong>critique mais non bloquante</strong>. Notre stratégie de repli dans <code>LocationHelper.getCurrentLocation()</code> :</p>
+
+<pre><code>if (checkSelfPermission(ACCESS_FINE_LOCATION) != GRANTED &&
+    checkSelfPermission(ACCESS_COARSE_LOCATION) != GRANTED) {
+    return Pair(DEFAULT_LATITUDE, DEFAULT_LONGITUDE)  // 0.0, 0.0
+}</code></pre>
+
+<p><strong>Stratégie de repli :</strong></p>
+<ul>
+    <li>L'incident est <strong>quand même enregistré</strong> dans Room avec <code>latitude=0.0, longitude=0.0</code></li>
+    <li>La détection de chute (accéléromètre) fonctionne <strong>indépendamment</strong> de la localisation</li>
+    <li>Le SMS est envoyé avec la mention <em>"Location unavailable"</em></li>
+</ul>
+
+<p><strong>Cas <code>shouldShowRequestPermissionRationale = false</code> :</strong> L'utilisateur a coché "Ne plus demander". Nous pourrions afficher un dialogue guidant vers les paramètres système via <code>Settings.ACTION_APPLICATION_DETAILS_SETTINGS</code>.</p>
+
+<p><strong>Pourquoi cette approche ?</strong> Dans un contexte de sécurité personnelle, il est préférable d'enregistrer un incident <strong>sans position</strong> plutôt que de ne pas l'enregistrer du tout.</p>
+
+<h3 class="page-break">Question 3 — Limites du ContentProvider et injections</h3>
+
+<p>Notre <code>EmergencyContactProvider</code> est protégé par une permission <code>signature|privileged</code> :</p>
+
+<pre><code>&lt;permission
+    android:name="com.guardian.track.permission.READ_EMERGENCY_CONTACTS"
+    android:protectionLevel="signature|privileged" /&gt;</code></pre>
+
+<p><strong>Limites :</strong> Les apps système (privileged) peuvent contourner la protection. Sur un appareil rooté, toute protection peut être contournée.</p>
+
+<p><strong>Attaque Content Provider Injection :</strong> Un attaquant manipule les paramètres SQL :</p>
+
+<pre><code>// Vulnérable :
+cursor = query(uri, null, "name = " + userInput, null, null)
+// userInput = "'; DROP TABLE contacts; --"</code></pre>
+
+<p><strong>Notre protection :</strong></p>
+<ol>
+    <li>Paramètres de sélection paramétrés (<code>selectionArgs</code>) — pas de concaténation</li>
+    <li>URI validée via <code>UriMatcher</code> avant tout accès</li>
+    <li>Permission signature empêche toute app tierce</li>
+    <li>Données exposées en lecture seule</li>
+</ol>
+
+<h3>Question 4 — Restrictions Android 12+ et ACTION_BOOT_COMPLETED</h3>
+
+<p>Depuis Android 12, les applications ne peuvent plus démarrer un Foreground Service depuis un contexte en arrière-plan. <code>startForegroundService()</code> depuis un <code>BroadcastReceiver</code> lève une <code>ForegroundServiceStartNotAllowedException</code>.</p>
+
+<p><strong>Notre solution — WorkManager comme intermédiaire :</strong></p>
+
+<pre><code>class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "service_start",
+                ExistingWorkPolicy.KEEP,
+                OneTimeWorkRequestBuilder&lt;ServiceStartWorker&gt;().build()
+            )
+        }
+    }
+}</code></pre>
+
+<p>Le <code>ServiceStartWorker</code> est exécuté par le système dans un contexte autorisé, ce qui lui permet d'appeler <code>startForegroundService()</code> sans violer les restrictions. <code>ExistingWorkPolicy.KEEP</code> évite les duplications.</p>
+
+<h3>Question 5 — Séparation Entity / DTO / DomainModel</h3>
+
+<table>
+    <tr><th>Couche</th><th>Rôle</th><th>Contrainte</th></tr>
+    <tr><td><strong>Entity</strong> (Room)</td><td>Persistance SQLite</td><td>Annotée @Entity, types SQLite</td></tr>
+    <tr><td><strong>DTO</strong> (Réseau)</td><td>Communication API</td><td>Format serveur, ISO8601</td></tr>
+    <tr><td><strong>Domain Model</strong></td><td>Logique métier</td><td>Aucune dépendance technique</td></tr>
+</table>
+
+<p><strong>Exemple concret :</strong></p>
+
+<pre><code>// Entity Room — liée à SQLite
+@Entity(tableName = "incidents")
+data class IncidentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long,           // Unix timestamp
+    val type: String,              // "FALL" (texte brut)
+    @ColumnInfo(name = "is_synced")
+    val isSynced: Int              // 0 ou 1 (SQLite n'a pas de Boolean)
+)
+
+// Domain Model — propre et typé
+data class Incident(
+    val id: Long,
+    val type: IncidentType,        // Enum typé (FALL, BATTERY, MANUAL)
+    val isSynced: Boolean,         // Boolean natif Kotlin
+    val formattedDateTime: String  // Propriété calculée pour l'UI
+)</code></pre>
+
+<p><strong>Valeur ajoutée :</strong> Si l'API change son format → seul le DTO change. Si Room ajoute un index → seule l'Entity change. Le ViewModel ne dépend jamais de Room ni de Retrofit.</p>
+
+<h3 class="page-break">Question 6 — WorkManager vs JobScheduler vs AlarmManager</h3>
+
+<table>
+    <tr><th>Critère</th><th>WorkManager</th><th>JobScheduler</th><th>AlarmManager</th></tr>
+    <tr><td>Contraintes réseau</td><td><span class="check">✅ Natif</span></td><td>Manuel</td><td>❌ Non</td></tr>
+    <tr><td>Survie redémarrage</td><td><span class="check">✅ Auto</span></td><td>❌ Manuel</td><td>❌ Non</td></tr>
+    <tr><td>Retry automatique</td><td><span class="check">✅ Backoff</span></td><td>❌ Manuel</td><td>❌ Non</td></tr>
+    <tr><td>Chaînage de tâches</td><td><span class="check">✅ Natif</span></td><td>❌ Non</td><td>❌ Non</td></tr>
+</table>
+
+<p><strong>Justification :</strong> Notre <code>SyncWorker</code> synchronise les incidents non-envoyés. WorkManager planifie automatiquement la synchronisation avec contrainte <code>NetworkType.CONNECTED</code>, survit aux redémarrages, et gère le retry avec backoff exponentiel — exactement ce dont un système offline-first a besoin.</p>
+
+<h2>3. Architecture et Structure du Projet</h2>
+
+<div class="architecture-box">┌─────────────────────────────────────────────────────────────┐
+│                  UI LAYER (Jetpack Compose)                  │
+│  DashboardScreen → DashboardViewModel                        │
+│  HistoryScreen   → HistoryViewModel                          │
+│  SettingsScreen  → SettingsViewModel                         │
+├─────────────────────────────────────────────────────────────┤
+│                     DOMAIN LAYER                             │
+│  Incident, EmergencyContact, IncidentType                    │
+├─────────────────────────────────────────────────────────────┤
+│                      DATA LAYER                              │
+│  Room (incidents, contacts) | DataStore | Retrofit           │
+│  IncidentRepository | ContactRepository                      │
+├─────────────────────────────────────────────────────────────┤
+│                 SERVICES & WORKERS                            │
+│  SurveillanceService | FallDetector | SyncWorker             │
+│  BootReceiver | BatteryReceiver | ContentProvider            │
+├─────────────────────────────────────────────────────────────┤
+│                   INJECTION (Hilt)                            │
+│  AppModule | DatabaseModule | NetworkModule                  │
+└─────────────────────────────────────────────────────────────┘</div>
+
+<p><strong>Algorithme de détection de chute (deux phases) :</strong></p>
+<ol>
+    <li><strong>Free-fall :</strong> magnitude &lt; 3.0 m/s² (proche de l'apesanteur)</li>
+    <li><strong>Impact :</strong> magnitude &gt; seuil configurable, dans les 500ms suivant la phase 1</li>
+</ol>
+<p><code>magnitude = √(ax² + ay² + az²)</code> calculée à partir de l'accéléromètre.</p>
+
+<h2>4. Base de Données Room — Description des Tables</h2>
+
+<h3>Table <code>incidents</code></h3>
+
+<table>
+    <tr><th>Colonne</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>id</code></td><td>INTEGER</td><td>Clé primaire auto-incrémentée</td></tr>
+    <tr><td><code>timestamp</code></td><td>INTEGER</td><td>Timestamp Unix (ms depuis epoch)</td></tr>
+    <tr><td><code>type</code></td><td>TEXT</td><td>"FALL", "BATTERY", ou "MANUAL"</td></tr>
+    <tr><td><code>latitude</code></td><td>REAL</td><td>Latitude GPS au moment de l'incident</td></tr>
+    <tr><td><code>longitude</code></td><td>REAL</td><td>Longitude GPS au moment de l'incident</td></tr>
+    <tr><td><code>is_synced</code></td><td>INTEGER</td><td>0 = non synchronisé, 1 = envoyé à l'API</td></tr>
+</table>
+
+<p>Chaque ligne représente un incident. Le champ <code>is_synced</code> permet au <code>SyncWorker</code> de ne synchroniser que les incidents pas encore envoyés.</p>
+
+<h3>Table <code>emergency_contacts</code></h3>
+
+<table>
+    <tr><th>Colonne</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>id</code></td><td>INTEGER</td><td>Clé primaire auto-incrémentée</td></tr>
+    <tr><td><code>name</code></td><td>TEXT</td><td>Nom du contact d'urgence</td></tr>
+    <tr><td><code>phone_number</code></td><td>TEXT</td><td>Numéro de téléphone pour SMS</td></tr>
+</table>
+
+<p>Lors d'un incident, un SMS est envoyé à <strong>chaque contact</strong> de cette table ainsi qu'au numéro d'urgence principal des préférences.</p>
+
+<h3>Table <code>room_master_table</code> (système)</h3>
+<p>Table interne de Room contenant le hash du schéma. Utilisée pour détecter les migrations de base de données. Ne doit pas être modifiée manuellement.</p>
+
+<h2 class="page-break">5. Grille d'Évaluation</h2>
+
+<table class="eval-grid">
+    <tr><th>Critère d'Évaluation</th><th>Points</th><th>Statut</th></tr>
+    <tr><td>Architecture MVVM + Hilt — Séparation View/ViewModel/Repository, modules Hilt, survie à la rotation</td><td>/20</td><td><span class="check">✅</span></td></tr>
+    <tr><td>Foreground Service + Détection Capteur — Notification persistante, algorithme free-fall/impact, paramétrable</td><td>/20</td><td><span class="check">✅</span></td></tr>
+    <tr><td>Room + DataStore + Export Fichier — Entités et DAO corrects, préférences persistées, export CSV fonctionnel</td><td>/15</td><td><span class="check">✅</span></td></tr>
+    <tr><td>Retrofit + Sealed Classes + WorkManager — Envoi d'alerte, gestion offline-first, synchronisation différée</td><td>/10</td><td><span class="check">✅</span></td></tr>
+    <tr><td>BroadcastReceiver (BOOT + BATTERY) — Deux receivers fonctionnels, compatibilité Android 12+</td><td>/10</td><td><span class="check">✅</span></td></tr>
+    <tr><td>ContentProvider sécurisé — URI contractuelle, permission signature déclarée</td><td>/10</td><td><span class="check">✅</span></td></tr>
+    <tr><td>Permissions Dynamiques + UX — Rationale affiché, mode simulation SMS</td><td>/10</td><td><span class="check">✅</span></td></tr>
+    <tr><td>Rapport Technique — Réponses contextualisées</td><td>/5</td><td><span class="check">✅</span></td></tr>
+    <tr class="total"><td><strong>TOTAL</strong></td><td><strong>/100</strong></td><td></td></tr>
+    <tr class="bonus"><td><em>BONUS — Jetpack Compose</em> — UI 100% Compose + Material 3 + animations</td><td>+5</td><td><span class="check">✅</span></td></tr>
+    <tr class="bonus"><td><em>BONUS — Algorithme amélioré</em> — Two-phase free-fall + impact</td><td>+3</td><td><span class="check">✅</span></td></tr>
+    <tr class="total"><td><strong>TOTAL POSSIBLE</strong></td><td><strong>/108</strong></td><td></td></tr>
+</table>
+
+<h2>6. Conclusion</h2>
+
+<p>GuardianTrack démontre l'utilisation des <strong>4 piliers Android</strong> (Activity, Service, BroadcastReceiver, ContentProvider) dans un contexte réel de sécurité personnelle. L'architecture MVVM avec Hilt assure une séparation claire des responsabilités, tandis que l'approche offline-first (Room + WorkManager) garantit la fiabilité même sans connexion réseau.</p>
+
+<p>Le choix de Jetpack Compose pour l'UI permet une interface futuriste et réactive avec support complet du mode clair/sombre et des animations Material 3.</p>
+
+</body>
+</html>

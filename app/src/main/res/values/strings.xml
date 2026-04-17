@@ -1,0 +1,74 @@
+<resources>
+    <string name="app_name">GuardianTrack</string>
+    <string name="permission_read_contacts_label">Read Emergency Contacts</string>
+    <string name="permission_read_contacts_desc">Allows reading emergency contacts from GuardianTrack</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Dashboard</string>
+    <string name="sensor_active">Active</string>
+    <string name="sensor_inactive">Inactive</string>
+    <string name="gps_enabled">GPS Enabled</string>
+    <string name="gps_disabled">GPS Disabled</string>
+    <string name="battery_level">Battery: %1$d%%</string>
+    <string name="manual_alert">Send Alert</string>
+    <string name="service_running">Surveillance Active</string>
+    <string name="service_stopped">Surveillance Stopped</string>
+
+    <!-- History -->
+    <string name="history_title">Incident History</string>
+    <string name="history_empty">No incidents recorded</string>
+    <string name="export_csv">Export CSV</string>
+    <string name="export_success">History exported successfully</string>
+    <string name="export_error">Export failed</string>
+    <string name="incident_fall">Fall Detected</string>
+    <string name="incident_battery">Battery Critical</string>
+    <string name="incident_manual">Manual Alert</string>
+    <string name="incident_synced">Synced</string>
+    <string name="incident_pending">Pending sync</string>
+    <string name="delete_incident">Delete</string>
+    <string name="confirm_delete">Are you sure you want to delete this incident?</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="sensitivity_threshold">Sensitivity Threshold</string>
+    <string name="sensitivity_value">%1$.1f m/s²</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="emergency_number">Emergency Number</string>
+    <string name="emergency_number_hint">Enter phone number</string>
+    <string name="sms_simulation">SMS Simulation Mode</string>
+    <string name="sms_simulation_desc">When enabled, SMS are replaced by notifications (recommended for testing)</string>
+    <string name="emergency_contacts">Emergency Contacts</string>
+    <string name="add_contact">Add Contact</string>
+    <string name="contact_name">Name</string>
+    <string name="contact_phone">Phone Number</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Permissions -->
+    <string name="permission_location_title">Location Permission Required</string>
+    <string name="permission_location_rationale">GuardianTrack needs your location to record incident coordinates. This helps emergency responders find you.</string>
+    <string name="permission_sms_title">SMS Permission Required</string>
+    <string name="permission_sms_rationale">GuardianTrack needs SMS access to send emergency alerts to your configured emergency contact.</string>
+    <string name="permission_notification_title">Notification Permission Required</string>
+    <string name="permission_notification_rationale">GuardianTrack needs to show notifications for surveillance status and emergency alerts.</string>
+    <string name="permission_denied_settings">Permission denied. Please enable it in Settings.</string>
+    <string name="open_settings">Open Settings</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_surveillance">Surveillance Service</string>
+    <string name="notification_channel_alerts">Emergency Alerts</string>
+    <string name="notification_channel_battery">Battery Alerts</string>
+    <string name="notification_surveillance_title">GuardianTrack Active</string>
+    <string name="notification_surveillance_text">Monitoring your safety…</string>
+    <string name="notification_fall_title">⚠️ Fall Detected!</string>
+    <string name="notification_fall_text">A fall was detected at %1$s. Emergency contact notified.</string>
+    <string name="notification_battery_title">🔋 Battery Critical</string>
+    <string name="notification_battery_text">Battery is critically low. Location recorded.</string>
+    <string name="notification_sms_sim_title">📱 SMS Simulation</string>
+    <string name="notification_sms_sim_text">Would send SMS to %1$s: %2$s</string>
+</resources>
